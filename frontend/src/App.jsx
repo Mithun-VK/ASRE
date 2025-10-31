@@ -11,7 +11,7 @@ import './App.css';
 // - Real-time trending stocks
 // - Service health monitoring
 
-const API_BASE_URL = "http://localhost:3001/api";
+const API_BASE_URL = "https://asre.onrender.com";
 
 export default function ASREDemo() {
   const [symbol, setSymbol] = useState("");
