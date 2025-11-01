@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const marketService = require('./marketService');
 
 const app = express();
@@ -15,323 +14,186 @@ const TRENDING_STOCKS = [
   'HINDUNILVR.NS', 'BHARTIARTL.NS', 'ITC.NS', 'SBIN.NS', 'LT.NS'
 ];
 
-// ===== ENHANCED DATA FETCHING FUNCTIONS =====
+// ===== ENHANCED DATA FETCHING USING MARKETSERVICE =====
 
-// 1. Get 5+ years of historical data
-async function getHistoricalData(symbol) {
+// 1. Get comprehensive stock data with 5+ years history
+async function getComprehensiveStockData(symbol) {
   try {
-    console.log(`📈 Fetching 5-year historical data for ${symbol}...`);
-    
-    const endDate = Math.floor(Date.now() / 1000);
-    const startDate = endDate - (5 * 365 * 24 * 60 * 60); // 5 years back
-    
-    const response = await axios.get(
-      `https://query1.finance.yahoo.com/v10/finance/chart/${symbol}`,
-      {
-        params: {
-          interval: '1d',
-          period1: startDate,
-          period2: endDate
-        },
-        timeout: 10000
-      }
-    );
-    
-    const quotes = response.data.chart.result[0].quotes || [];
-    
-    return quotes.map(q => ({
-      date: new Date(q.timestamp * 1000),
-      open: q.open,
-      high: q.high,
-      low: q.low,
-      close: q.close,
-      volume: q.volume,
-      adjClose: q.adjClose
-    }));
-  } catch (error) {
-    console.error(`⚠️ Error fetching historical data for ${symbol}:`, error.message);
-    return [];
-  }
-}
+    console.log(`📊 Fetching comprehensive data for ${symbol}...`);
 
-// 2. Get analyst recommendations
-async function getAnalystRecommendations(symbol) {
-  try {
-    console.log(`👨‍💼 Fetching analyst recommendations for ${symbol}...`);
-    
-    const response = await axios.get(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}`,
-      {
-        params: {
-          modules: 'recommendationTrend'
-        },
-        timeout: 10000
-      }
-    );
-    
-    const trend = response.data.quoteSummary?.result?.[0]?.recommendationTrend?.trend || [];
-    
-    return trend.map((t, index) => ({
-      period: t.period,
-      strongBuy: t.strongBuy || 0,
-      buy: t.buy || 0,
-      hold: t.hold || 0,
-      sell: t.sell || 0,
-      strongSell: t.strongSell || 0
-    }));
-  } catch (error) {
-    console.error(`⚠️ Error fetching analyst recommendations for ${symbol}:`, error.message);
-    return [];
-  }
-}
+    // Use marketService's detailed method which includes historical data
+    const detailedData = await marketService.getDetailedStockData(symbol, {
+      period: '5y',  // 5 years of data
+      interval: '1d'  // Daily candles
+    });
 
-// 3. Get comprehensive fundamental metrics
-async function getFundamentalMetrics(symbol) {
-  try {
-    console.log(`📊 Fetching fundamental metrics for ${symbol}...`);
-    
-    const response = await axios.get(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}`,
-      {
-        params: {
-          modules: 'defaultKeyStatistics,financialData,summaryDetail,incomeStatementHistory,cashflowStatementHistory'
-        },
-        timeout: 10000
-      }
-    );
-    
-    const result = response.data.quoteSummary?.result?.[0] || {};
-    
-    return {
-      // Valuation metrics
-      trailingPE: result.defaultKeyStatistics?.trailingPE?.raw,
-      forwardPE: result.summaryDetail?.forwardPE?.raw,
-      priceToBook: result.defaultKeyStatistics?.priceToBook?.raw,
-      priceToSales: result.summaryDetail?.priceToSalesTrailing12Months?.raw,
-      pegRatio: result.defaultKeyStatistics?.pegRatio?.raw,
-      
-      // Growth metrics
-      earningsGrowth: result.financialData?.earningsGrowth?.raw,
-      revenueGrowth: result.financialData?.revenueGrowth?.raw,
-      earningsQuarterlyGrowth: result.defaultKeyStatistics?.earningsQuarterlyGrowth?.raw,
-      
-      // Profitability metrics
-      returnOnEquity: result.financialData?.returnOnEquity?.raw,
-      returnOnAssets: result.financialData?.returnOnAssets?.raw,
-      profitMargin: result.financialData?.profitMargin?.raw,
-      
-      // Financial health
-      debtToEquity: result.financialData?.debtToEquity?.raw,
-      debtToAssets: result.financialData?.debtToAssets?.raw,
-      currentRatio: result.defaultKeyStatistics?.currentRatio?.raw,
-      quickRatio: result.defaultKeyStatistics?.quickRatio?.raw,
-      
-      // Cash flow
-      freeCashflow: result.financialData?.freeCashflow?.raw,
-      operatingCashflow: result.financialData?.operatingCashflow?.raw,
-      totalCash: result.financialData?.totalCash?.raw,
-      totalDebt: result.financialData?.totalDebt?.raw,
-      
-      // Market data
-      beta: result.defaultKeyStatistics?.beta?.raw,
-      marketCap: result.summaryDetail?.marketCap?.raw,
-      floatShares: result.defaultKeyStatistics?.floatShares?.raw,
-      sharesOutstanding: result.defaultKeyStatistics?.sharesOutstanding?.raw,
-      
-      // Dividend info
-      dividendRate: result.summaryDetail?.dividendRate?.raw,
-      dividendYield: result.summaryDetail?.dividendYield?.raw,
-      
-      // 52-week metrics
-      fiftyTwoWeekHigh: result.summaryDetail?.fiftyTwoWeekHigh?.raw,
-      fiftyTwoWeekLow: result.summaryDetail?.fiftyTwoWeekLow?.raw,
-      fiftyDayAverage: result.summaryDetail?.fiftyDayAverage?.raw,
-      twoHundredDayAverage: result.summaryDetail?.twoHundredDayAverage?.raw
-    };
+    return detailedData;
   } catch (error) {
-    console.error(`⚠️ Error fetching fundamental metrics for ${symbol}:`, error.message);
+    console.error(`⚠️ Error in getComprehensiveStockData:`, error.message);
     return {};
   }
 }
 
-// 4. Get analyst price targets and consensus
-async function getPriceTargetAndConsensus(symbol) {
+// 2. Get current quote with all available fields
+async function getQuoteData(symbol) {
   try {
-    console.log(`🎯 Fetching price targets for ${symbol}...`);
-    
-    const response = await axios.get(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}`,
-      {
-        params: {
-          modules: 'financialData'
-        },
-        timeout: 10000
-      }
-    );
-    
-    const financialData = response.data.quoteSummary?.result?.[0]?.financialData || {};
-    
-    return {
-      targetMeanPrice: financialData.targetMeanPrice?.raw,
-      targetMedianPrice: financialData.targetMedianPrice?.raw,
-      numberOfAnalysts: financialData.numberOfAnalysts?.raw,
-      recommendationKey: financialData.recommendationKey,
-      recommendationRating: financialData.recommendationRating
-    };
+    console.log(`💰 Fetching quote data for ${symbol}...`);
+
+    const quote = await marketService.getStockData(symbol);
+    return quote;
   } catch (error) {
-    console.error(`⚠️ Error fetching price targets for ${symbol}:`, error.message);
+    console.error(`⚠️ Error in getQuoteData:`, error.message);
     return {};
   }
 }
 
-// 5. Get company profile and industry info
-async function getCompanyProfile(symbol) {
-  try {
-    console.log(`🏢 Fetching company profile for ${symbol}...`);
-    
-    const response = await axios.get(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}`,
-      {
-        params: {
-          modules: 'summaryProfile,institutionOwnership,fundOwnership'
-        },
-        timeout: 10000
-      }
-    );
-    
-    const result = response.data.quoteSummary?.result?.[0] || {};
-    
-    return {
-      longName: result.summaryProfile?.longName,
-      sector: result.summaryProfile?.sector,
-      industry: result.summaryProfile?.industry,
-      website: result.summaryProfile?.website,
-      description: result.summaryProfile?.longBusinessSummary,
-      institutionalHoldPercent: result.institutionOwnership?.heldPercent?.raw
-    };
-  } catch (error) {
-    console.error(`⚠️ Error fetching company profile for ${symbol}:`, error.message);
-    return {};
-  }
-}
+// ===== MAIN COMPREHENSIVE DATA ENDPOINT (HIGH CONFIDENCE) =====
 
-// ===== MAIN COMPREHENSIVE DATA ENDPOINT =====
-
-// Get detailed stock data with HIGH CONFIDENCE
 app.get('/api/stock/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
-    console.log(`\\n🚀 Fetching comprehensive HIGH-CONFIDENCE data for ${symbol}...`);
+    console.log(`\n🚀 Fetching comprehensive HIGH-CONFIDENCE data for ${symbol}...`);
     const startTime = Date.now();
-    
-    // Fetch all data in parallel
+
+    // Fetch all data in parallel using marketService
     const [
-      marketData,
-      historical,
-      recommendations,
-      fundamentals,
-      priceTarget,
-      profile
+      detailedData,
+      quoteData
     ] = await Promise.all([
-      marketService.getStockData(symbol).catch(() => ({})),
-      getHistoricalData(symbol),
-      getAnalystRecommendations(symbol),
-      getFundamentalMetrics(symbol),
-      getPriceTargetAndConsensus(symbol),
-      getCompanyProfile(symbol)
+      getComprehensiveStockData(symbol),
+      getQuoteData(symbol)
     ]);
-    
+
     const fetchTime = Date.now() - startTime;
-    
-    // Combine all data
+
+    // Extract historical data points
+    const historical = detailedData.historical || [];
+    const historicalDataPoints = historical.length;
+
+    // Extract fundamentals
+    const statistics = detailedData.statistics || {};
+    const financialData = detailedData.financialData || {};
+    const summaryDetail = detailedData.summaryDetail || {};
+
+    // Build comprehensive response
     const comprehensiveData = {
       symbol,
       timestamp: new Date().toISOString(),
       fetchTimeMs: fetchTime,
-      
+
       // Real-time quote data
       quote: {
-        regularMarketPrice: marketData.price,
-        regularMarketChange: marketData.change,
-        regularMarketChangePercent: marketData.changePercent,
-        marketCap: fundamentals.marketCap,
-        trailingPE: fundamentals.trailingPE,
-        forwardPE: fundamentals.forwardPE,
-        priceToBook: fundamentals.priceToBook,
-        beta: fundamentals.beta
+        regularMarketPrice: quoteData.price,
+        regularMarketChange: quoteData.change,
+        regularMarketChangePercent: quoteData.changePercent,
+        marketCap: quoteData.marketCap,
+        trailingPE: quoteData.pe,
+        forwardPE: quoteData.forwardPE,
+        priceToBook: statistics.priceToBook?.raw,
+        beta: statistics.beta?.raw,
+        volume: quoteData.volume,
+        averageVolume: quoteData.averageVolume,
+        fiftyTwoWeekHigh: quoteData.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: quoteData.fiftyTwoWeekLow,
+        fiftyDayAverage: summaryDetail.fiftyDayAverage?.raw,
+        twoHundredDayAverage: summaryDetail.twoHundredDayAverage?.raw
       },
-      
+
       // 5+ years of historical data (HIGH CONFIDENCE)
       historical: historical,
-      historicalDataPoints: historical.length, // Should be ~1260 (5 years of trading days)
-      
-      // Analyst recommendations (HIGH CONFIDENCE)
-      recommendations: recommendations,
-      recommendationTrend: {
-        current: recommendations[0] || {},
-        previous: recommendations[1] || {},
-        trend: recommendations
+      historicalDataPoints: historicalDataPoints,
+
+      // Recommendation trend (if available from quoteSummary)
+      recommendationTrend: detailedData.recommendationTrend || {
+        trend: []
       },
-      
+
       // Complete fundamental metrics (HIGH CONFIDENCE)
       fundamentals: {
         valuation: {
-          trailingPE: fundamentals.trailingPE,
-          forwardPE: fundamentals.forwardPE,
-          priceToBook: fundamentals.priceToBook,
-          priceToSales: fundamentals.priceToSales,
-          pegRatio: fundamentals.pegRatio
+          trailingPE: statistics.trailingPE?.raw,
+          forwardPE: summaryDetail.forwardPE?.raw,
+          priceToBook: statistics.priceToBook?.raw,
+          priceToSales: summaryDetail.priceToSalesTrailing12Months?.raw,
+          pegRatio: statistics.pegRatio?.raw,
+          enterpriseValue: statistics.enterpriseValue?.raw
         },
         growth: {
-          earningsGrowth: fundamentals.earningsGrowth,
-          revenueGrowth: fundamentals.revenueGrowth,
-          earningsQuarterlyGrowth: fundamentals.earningsQuarterlyGrowth
+          earningsGrowth: financialData.earningsGrowth?.raw,
+          revenueGrowth: financialData.revenueGrowth?.raw,
+          earningsQuarterlyGrowth: statistics.earningsQuarterlyGrowth?.raw
         },
         profitability: {
-          returnOnEquity: fundamentals.returnOnEquity,
-          returnOnAssets: fundamentals.returnOnAssets,
-          profitMargin: fundamentals.profitMargin
+          returnOnEquity: financialData.returnOnEquity?.raw,
+          returnOnAssets: financialData.returnOnAssets?.raw,
+          profitMargin: financialData.profitMargin?.raw,
+          operatingMargin: financialData.operatingMargin?.raw
         },
         financial_health: {
-          debtToEquity: fundamentals.debtToEquity,
-          debtToAssets: fundamentals.debtToAssets,
-          currentRatio: fundamentals.currentRatio,
-          quickRatio: fundamentals.quickRatio
+          debtToEquity: financialData.debtToEquity?.raw,
+          debtToAssets: financialData.debtToAssets?.raw,
+          currentRatio: statistics.currentRatio?.raw,
+          quickRatio: statistics.quickRatio?.raw
         },
         cash_flow: {
-          freeCashflow: fundamentals.freeCashflow,
-          operatingCashflow: fundamentals.operatingCashflow,
-          totalCash: fundamentals.totalCash,
-          totalDebt: fundamentals.totalDebt
+          freeCashflow: financialData.freeCashflow?.raw,
+          operatingCashflow: financialData.operatingCashflow?.raw,
+          totalCash: financialData.totalCash?.raw,
+          totalDebt: financialData.totalDebt?.raw
+        },
+        dividends: {
+          dividendRate: summaryDetail.dividendRate?.raw,
+          dividendYield: summaryDetail.dividendYield?.raw,
+          payoutRatio: statistics.payoutRatio?.raw
         },
         other: {
-          beta: fundamentals.beta,
-          dividendYield: fundamentals.dividendYield,
-          dividendRate: fundamentals.dividendRate
+          beta: statistics.beta?.raw,
+          marketCap: quoteData.marketCap,
+          sharesOutstanding: statistics.sharesOutstanding?.raw,
+          floatShares: statistics.floatShares?.raw
         }
       },
-      
-      // Analyst price targets (HIGH CONFIDENCE)
-      priceTarget: priceTarget,
-      
+
+      // Analyst data (HIGH CONFIDENCE)
+      priceTarget: {
+        targetMeanPrice: financialData.targetMeanPrice?.raw,
+        targetMedianPrice: financialData.targetMedianPrice?.raw,
+        numberOfAnalysts: financialData.numberOfAnalysts?.raw,
+        recommendationKey: financialData.recommendationKey
+      },
+
       // Company profile
-      profile: profile,
-      
-      // Confidence metrics summary
+      profile: {
+        longName: quoteData.name,
+        sector: statistics.sector?.raw,
+        industry: statistics.industry?.raw,
+        website: statistics.website?.raw,
+        exchange: quoteData.exchange,
+        currency: quoteData.currency,
+        quoteType: quoteData.quoteType
+      },
+
+      // Confidence metrics summary for HIGH CONFIDENCE SCORING
       confidenceSummary: {
-        dataDepthStatus: historical.length >= 1000 ? 'EXCELLENT' : historical.length >= 500 ? 'GOOD' : 'LIMITED',
-        historicalDataPoints: historical.length,
-        analystRecommendationsAvailable: recommendations.length > 0,
-        recommendationCount: recommendations[0]?.strongBuy + recommendations[0]?.buy + recommendations[0]?.hold + recommendations[0]?.sell + recommendations[0]?.strongSell || 0,
-        fundamentalMetricsAvailable: Object.keys(fundamentals).length,
-        priceTargetAvailable: !!priceTarget.targetMeanPrice,
-        numberOfAnalysts: priceTarget.numberOfAnalysts
+        dataDepthStatus: historicalDataPoints >= 1000 ? 'EXCELLENT' : historicalDataPoints >= 500 ? 'GOOD' : 'LIMITED',
+        historicalDataPoints: historicalDataPoints,
+        analystRecommendationsAvailable: !!financialData.recommendationKey,
+        numberOfAnalysts: financialData.numberOfAnalysts?.raw || 0,
+        fundamentalMetricsAvailable: Object.keys(financialData).filter(k => financialData[k]).length,
+        priceTargetAvailable: !!financialData.targetMeanPrice?.raw,
+        dataQualityScore: calculateDataQuality({
+          historicalDataPoints,
+          numberOfAnalysts: financialData.numberOfAnalysts?.raw,
+          fundamentalsCount: Object.keys(financialData).filter(k => financialData[k]).length
+        })
       }
     };
-    
+
     console.log(`✅ Comprehensive data fetched in ${fetchTime}ms`);
+    console.log(`📊 Data Quality - Historical: ${historicalDataPoints}, Analysts: ${financialData.numberOfAnalysts?.raw || 0}, Fundamentals: ${Object.keys(financialData).filter(k => financialData[k]).length}`);
+
     res.json(comprehensiveData);
-    
+
   } catch (error) {
     console.error('❌ Error fetching comprehensive stock data:', error.message);
     res.status(500).json({ 
@@ -342,12 +204,31 @@ app.get('/api/stock/:symbol', async (req, res) => {
   }
 });
 
+// Helper function to calculate data quality score
+function calculateDataQuality(data) {
+  let score = 50; // Base score
+
+  if (data.historicalDataPoints >= 1000) score += 15;
+  else if (data.historicalDataPoints >= 500) score += 10;
+  else if (data.historicalDataPoints >= 100) score += 5;
+
+  if (data.numberOfAnalysts >= 10) score += 15;
+  else if (data.numberOfAnalysts >= 5) score += 10;
+  else if (data.numberOfAnalysts >= 1) score += 5;
+
+  if (data.fundamentalsCount >= 15) score += 20;
+  else if (data.fundamentalsCount >= 10) score += 15;
+  else if (data.fundamentalsCount >= 5) score += 10;
+
+  return Math.min(95, score);
+}
+
 // Get multiple quotes efficiently
 app.get('/api/quotes', async (req, res) => {
   try {
     const symbols = req.query.symbols ? req.query.symbols.split(',') : TRENDING_STOCKS;
     console.log(`📊 Fetching quotes for: ${symbols.join(', ')}`);
-    
+
     const quotes = await marketService.getMultipleQuotes(symbols);
     res.json({ quotes });
   } catch (error) {
@@ -361,15 +242,15 @@ app.get('/api/trending', async (req, res) => {
   try {
     console.log('🔥 Fetching trending stocks...');
     const quotes = await marketService.getMultipleQuotes(TRENDING_STOCKS);
-    
+
     const formattedQuotes = quotes.map(q => ({
-      symbol: q.symbol,
+      symbol: q.symbol || q.name,
       shortName: q.name,
       regularMarketPrice: q.price,
       regularMarketChange: q.change,
       regularMarketChangePercent: q.changePercent
     }));
-    
+
     res.json({ quotes: formattedQuotes });
   } catch (error) {
     console.error('❌ Error fetching trending:', error.message);
@@ -397,19 +278,22 @@ app.get('/api/health', async (req, res) => {
     const healthStatus = await marketService.healthCheck();
     const stats = marketService.getStats();
     const cacheStats = marketService.getCacheStats();
-    
+
     res.json({
       ...healthStatus,
       stats,
       cache: cacheStats,
       version: '2.1.0-ENHANCED',
+      backend: 'yahoo-finance2',
       features: [
         '5+ years historical data',
         'Analyst recommendations',
         'Complete fundamental metrics',
         'Price targets',
         'Company profiles',
-        'High-confidence scoring ready'
+        'High-confidence scoring ready',
+        'Parallel data fetching',
+        'Smart caching'
       ]
     });
   } catch (error) {
@@ -425,7 +309,7 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/stats', (req, res) => {
   const stats = marketService.getStats();
   const cacheStats = marketService.getCacheStats();
-  
+
   res.json({
     service: stats,
     cache: cacheStats,
@@ -461,14 +345,15 @@ app.post('/api/analyze-message', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\\n🚀 ASRE Backend Server v2.1 - ENHANCED`);
-  console.log(`📡 Running on http://localhost:${PORT}\\n`);
+  console.log(`\n🚀 ASRE Backend Server v2.1 - ENHANCED (Corrected)`);
+  console.log(`📡 Running on http://localhost:${PORT}\n`);
   console.log(`📊 Enhanced Features:`);
-  console.log(`   ✅ 5+ Years Historical Data`);
+  console.log(`   ✅ 5+ Years Historical Data (yahoo-finance2)`);
   console.log(`   ✅ Analyst Recommendations`);
   console.log(`   ✅ 25+ Fundamental Metrics`);
   console.log(`   ✅ Price Targets & Consensus`);
-  console.log(`   ✅ Company Profiles\\n`);
+  console.log(`   ✅ Company Profiles`);
+  console.log(`   ✅ Smart Caching & Rate Limiting\n`);
   console.log(`📊 API Endpoints:`);
   console.log(`   ├─ GET  /api/stock/:symbol       - Comprehensive stock data (HIGH CONFIDENCE)`);
   console.log(`   ├─ GET  /api/quote/:symbol       - Quick quote`);
@@ -477,11 +362,11 @@ app.listen(PORT, () => {
   console.log(`   ├─ GET  /api/health              - Health check + stats`);
   console.log(`   ├─ GET  /api/stats               - Service statistics`);
   console.log(`   ├─ POST /api/cache/clear         - Clear cache`);
-  console.log(`   └─ POST /api/analyze-message     - Extract symbols from text\\n`);
+  console.log(`   └─ POST /api/analyze-message     - Extract symbols from text\n`);
   console.log(`💡 Quick Test:`);
   console.log(`   curl http://localhost:${PORT}/api/health`);
-  console.log(`   curl http://localhost:${PORT}/api/stock/RELIANCE.NS\\n`);
-  console.log(`🎯 Expected Confidence Improvement: 50% → 85-95%\\n`);
+  console.log(`   curl http://localhost:${PORT}/api/stock/RELIANCE.NS\n`);
+  console.log(`🎯 Expected Confidence Improvement: 50% → 85-95%\n`);
 });
 
 module.exports = app;
