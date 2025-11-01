@@ -154,169 +154,6 @@ export default function ASREDemo() {
     return Math.round(scaled * 5 * 10) / 10;
   }
 
-  // ===== ENHANCED CONFIDENCE CALCULATION FUNCTIONS =====
-
-  // 1. DATA DEPTH & HISTORICAL COVERAGE (+0-15 points)
-  function getDataDepthScore(closes, recommendationsCount) {
-    let score = 0;
-
-    // Price history depth (252 trading days ≈ 1 year)
-    const yearsOfData = closes.length / 252;
-    if (yearsOfData >= 5) score += 15;
-    else if (yearsOfData >= 2) score += 10;
-    else if (yearsOfData >= 1) score += 5;
-    else if (yearsOfData >= 0.5) score += 2;
-
-    return Math.min(15, score);
-  }
-
-  // 2. ANALYST CONSENSUS STRENGTH (+0-15 points)
-  function getAnalystConsensusScore(recommendations = []) {
-    if (!recommendations.length) return 0;
-
-    let score = 0;
-
-    // Count of recommendations (more = more consensus)
-    if (recommendations.length >= 10) score += 10;
-    else if (recommendations.length >= 5) score += 7;
-    else if (recommendations.length >= 3) score += 5;
-    else if (recommendations.length === 2) score += 2;
-    else score += 1;
-
-    // Consensus strength (how aligned are they?)
-    const total = recommendations.reduce((sum, rec) => {
-      return sum + (rec.strongBuy || 0) + (rec.buy || 0) +
-        (rec.sell || 0) + (rec.strongSell || 0);
-    }, 0);
-
-    if (total === 0) return Math.min(15, score);
-
-    const consensusMetric = recommendations.reduce((max, rec) => {
-      const highest = Math.max(
-        rec.strongBuy || 0, rec.buy || 0,
-        rec.sell || 0, rec.strongSell || 0
-      );
-      return Math.max(max, highest / total);
-    }, 0);
-
-    // Strong agreement > 70% consensus
-    if (consensusMetric > 0.70) score += 5;
-    else if (consensusMetric > 0.50) score += 3;
-    else if (consensusMetric > 0.40) score += 1;
-
-    return Math.min(15, score);
-  }
-
-  // 3. TECHNICAL DATA COMPLETENESS (+0-25 points)
-  function getTechnicalDataScore(closes, rsi, macd, bollingerBands, ma50, ma200, sharpeRatio, maxDrawdown) {
-    let score = 0;
-
-    const indicators = [
-      closes.length >= 50,                    // Price data
-      rsi !== 50 && rsi !== null,             // RSI calculated
-      macd && macd.histogram !== 0,           // MACD calculated
-      bollingerBands && bollingerBands.middle !== 0, // Bollinger Bands
-      ma50 !== null && ma200 !== null,        // Moving averages
-      sharpeRatio !== 0 && sharpeRatio !== null, // Sharpe ratio
-      maxDrawdown !== 0 && maxDrawdown !== null   // Max drawdown
-    ];
-
-    // 3-4 points per available technical indicator
-    score = indicators.filter(Boolean).length * 3;
-
-    // Bonus for long-term data (enables reliable technical analysis)
-    if (closes.length >= 200) score += 4;
-
-    return Math.min(25, score);
-  }
-
-  // 4. FUNDAMENTAL METRICS COMPLETENESS (+0-24 points)
-  function getFundamentalDataScore(pe, pb, ps, roe, beta, debtToEquity,
-    freeCashflow, earningsGrowth, revenueGrowth) {
-    let score = 0;
-
-    const metrics = [
-      pe !== null && pe > 0,           // P/E ratio
-      pb !== null && pb > 0,           // P/B ratio
-      ps !== null && ps > 0,           // P/S ratio
-      roe !== null,                    // ROE
-      beta !== null && beta !== 0,     // Beta
-      debtToEquity !== null,           // Debt/Equity
-      freeCashflow !== null && freeCashflow > 0, // Free cash flow
-      earningsGrowth !== null,         // Earnings growth
-      revenueGrowth !== null           // Revenue growth
-    ];
-
-    // Each metric = 2-3 points
-    score = metrics.filter(Boolean).length * 3;
-
-    // Cap at 24
-    return Math.min(24, score);
-  }
-
-  // 5. PREDICTION RELIABILITY (+0-21 points)
-  function getPredictionReliabilityScore(targetMeanPrice, currentPrice,
-    recommendations, momentum12m, volatility) {
-    let score = 0;
-
-    // Analyst price target available & reasonable
-    if (targetMeanPrice && currentPrice && currentPrice > 0) {
-      const targetDiff = Math.abs((targetMeanPrice - currentPrice) / currentPrice);
-      if (targetDiff > 0 && targetDiff < 1.0) score += 5; // 0-100% upside/downside reasonable
-    }
-
-    // Consensus direction (analysts agree on up/down)
-    if (recommendations && recommendations.length >= 5) {
-      const buyCount = recommendations.reduce((sum, r) =>
-        sum + (r.buy || 0) + (r.strongBuy || 0), 0);
-      const totalCount = recommendations.reduce((sum, r) =>
-        sum + (r.buy || 0) + (r.sell || 0) + (r.strongBuy || 0) + (r.strongSell || 0), 0);
-
-      if (totalCount > 0) {
-        const buyRatio = buyCount / totalCount;
-        if (buyRatio > 0.60 || buyRatio < 0.40) score += 5; // Clear direction
-        else if (buyRatio > 0.55 || buyRatio < 0.45) score += 2;
-      }
-    }
-
-    // Recent momentum alignment with analyst sentiment
-    if (momentum12m > 0.20) score += 5; // Strong positive recent momentum
-    else if (momentum12m > 0.05) score += 2;
-
-    // Lower volatility = more predictable
-    if (volatility !== null && volatility !== undefined) {
-      if (volatility < 0.25) score += 6; // Low volatility = more reliable
-      else if (volatility < 0.50) score += 3;
-      else if (volatility < 0.75) score += 1;
-    }
-
-    return Math.min(21, score);
-  }
-
-  // 6. COMBINED CONFIDENCE SCORE (0-100)
-  function calculateConfidence(closes, recommendations, rsi, macd, bollingerBands,
-    ma50, ma200, sharpeRatio, maxDrawdown, pe, pb, ps, roe, beta, debtToEquity,
-    freeCashflow, earningsGrowth, revenueGrowth, targetMeanPrice, currentPrice, momentum12m, volatility) {
-
-    const dataDepth = getDataDepthScore(closes, recommendations.length);
-    const consensusScore = getAnalystConsensusScore(recommendations);
-    const technicalScore = getTechnicalDataScore(closes, rsi, macd, bollingerBands, ma50, ma200, sharpeRatio, maxDrawdown);
-    const fundamentalScore = getFundamentalDataScore(pe, pb, ps, roe, beta, debtToEquity, freeCashflow, earningsGrowth, revenueGrowth);
-    const predictionScore = getPredictionReliabilityScore(targetMeanPrice, currentPrice, recommendations, momentum12m, volatility);
-
-    // Total: 15 + 15 + 25 + 24 + 21 = 100 points
-    const totalScore = dataDepth + consensusScore + technicalScore + fundamentalScore + predictionScore;
-
-    return {
-      total: Math.min(95, Math.max(50, Math.round(totalScore))),
-      dataDepth,
-      consensusScore,
-      technicalScore,
-      fundamentalScore,
-      predictionScore
-    };
-  }
-
   function addToWatchlist(sym) {
     if (!watchlist.includes(sym)) {
       const newList = [...watchlist, sym];
@@ -517,33 +354,14 @@ export default function ASREDemo() {
         return Math.round(projection * 100);
       })();
 
-      // ===== ENHANCED CONFIDENCE CALCULATION =====
-      const confidenceData = calculateConfidence(
-        closes,
-        recommendations,
-        rsi,
-        macd,
-        bollingerBands,
-        ma50,
-        ma200,
-        sharpeRatio,
-        maxDrawdown,
-        pe,
-        pb,
-        ps,
-        roe,
-        beta,
-        debtToEquity,
-        freeCashflow,
-        earningsGrowth,
-        revenueGrowth,
-        targetMeanPrice,
-        currentPrice,
-        momentum12m,
-        volatility
-      );
+      // ===== USE BACKEND CONFIDENCE CALCULATION (FIXED) =====
+      // Backend has already calculated the accurate confidence
+      // Frontend should trust backend's calculation instead of recalculating
+      const backendConfidence = data.confidence || 50;
+      const backendConfidenceBreakdown = data.confidenceBreakdown || "Data:0/15 | Consensus:0/15 | Technical:25/25 | Fundamental:0/24 | Prediction:0/21";
 
-      const confidenceBreakdown = `Data:${confidenceData.dataDepth}/15 | Consensus:${confidenceData.consensusScore}/15 | Technical:${confidenceData.technicalScore}/25 | Fundamental:${confidenceData.fundamentalScore}/24 | Prediction:${confidenceData.predictionScore}/21`;
+      console.log(`✅ Backend Confidence: ${backendConfidence}%`);
+      console.log(`✅ Backend Breakdown: ${backendConfidenceBreakdown}`);
 
       const explanation = [];
       if (pe !== null) explanation.push(`P/E: ${pe.toFixed(2)}`);
@@ -573,8 +391,8 @@ export default function ASREDemo() {
         stars,
         riskLabel,
         projReturn,
-        confidence: confidenceData.total,
-        confidenceBreakdown,
+        confidence: backendConfidence,  // ✅ USE BACKEND CONFIDENCE
+        confidenceBreakdown: backendConfidenceBreakdown,  // ✅ USE BACKEND BREAKDOWN
         explanation,
         recommendationsCount: recommendations.length,
         rsi,
