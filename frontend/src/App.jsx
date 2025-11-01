@@ -2,16 +2,15 @@
 import React, { useState, useEffect } from "react";
 import './App.css';
 
-// ASRE Pro v2.0 - Production Grade
-// - Optimized caching and rate limiting
-// - Advanced technical indicators (RSI, MACD, Bollinger Bands)
-// - Professional UI with CSS classes
-// - Watchlist with localStorage persistence
-// - Export analysis to CSV
+// ASRE Pro v2.1 - Enhanced with Balanced Scoring Formula
+// - V1's intuitive balanced weights (0.3, 0.25, 0.15, 0.15, 0.15)
+// - V2's advanced technical indicators (RSI, MACD, Bollinger Bands)
+// - Professional UI with watchlist & CSV export
 // - Real-time trending stocks
 // - Service health monitoring
 
 const API_BASE_URL = "https://asre.onrender.com/api";
+console.log("API URL:", API_BASE_URL);
 
 export default function ASREDemo() {
   const [symbol, setSymbol] = useState("");
@@ -133,6 +132,7 @@ export default function ASREDemo() {
     return maxDD;
   }
 
+  // ===== ENHANCED SENTIMENT SCORE FROM V2 =====
   function enhancedSentimentScore(recommendations = []) {
     if (!recommendations || recommendations.length === 0) return 0.5;
     let score = 0;
@@ -271,6 +271,9 @@ export default function ASREDemo() {
 
       const sentiment = enhancedSentimentScore(recommendations);
 
+      // ===== V1's BALANCED COMPONENT SCORING =====
+      
+      // VALUATION: 30% weight
       const valComp = (() => {
         let score = 0.5, count = 0;
         if (pe !== null && pe > 0) { score += normalize(1 / pe, 1 / 50, 1 / 5) * 0.35; count += 0.35; }
@@ -281,6 +284,7 @@ export default function ASREDemo() {
         return count > 0 ? score / (count + (1 - count) * 0.5) : 0.5;
       })();
 
+      // GROWTH: 25% weight
       const growthComp = (() => {
         let score = 0, count = 0;
         if (earningsGrowth !== null) { score += normalize(earningsGrowth, -0.3, 0.5) * 0.4; count += 0.4; }
@@ -290,6 +294,7 @@ export default function ASREDemo() {
         return count > 0 ? score / count : 0.5;
       })();
 
+      // MOMENTUM: 15% weight
       const momentumComp = (() => {
         let score = 0;
         score += normalize(momentum12m, -0.5, 1.0) * 0.20;
@@ -306,6 +311,10 @@ export default function ASREDemo() {
         return Math.max(0, Math.min(1, score));
       })();
 
+      // SENTIMENT: 15% weight (from analyst recommendations)
+      const sentimentComp = sentiment;
+
+      // RISK: 15% weight (subtracted from final score)
       const riskComp = (() => {
         let risk = 0;
         risk += (volatility ? normalize(volatility, 0.1, 0.8) : 0.15) * 0.30;
@@ -316,13 +325,27 @@ export default function ASREDemo() {
         return Math.max(0, Math.min(1, risk));
       })();
 
-      const sentimentComp = sentiment !== null ? sentiment : 0.5;
-      const weights = { w1: 0.28, w2: 0.24, w3: 0.26, w4: 0.10, w5: 0.12 };
-      const rawScore = weights.w1 * valComp + weights.w2 * growthComp + weights.w3 * momentumComp + weights.w4 * sentimentComp - weights.w5 * riskComp;
-      const score = Math.max(0, Math.min(1, (rawScore + 0.3) / 1.3));
-      const stars = toStars(score);
-      const riskLabel = riskComp > 0.70 ? "Very High" : riskComp > 0.50 ? "High" : riskComp > 0.30 ? "Moderate" : "Low";
+      // ===== V1's FINAL SCORING FORMULA =====
+      // Score = 0.30*Valuation + 0.25*Growth + 0.15*Momentum + 0.15*Sentiment - 0.15*Risk
+      const rawScore = 
+        0.30 * valComp + 
+        0.25 * growthComp + 
+        0.15 * momentumComp + 
+        0.15 * sentimentComp - 
+        0.15 * riskComp;
 
+      // Normalize to 0-1 range with slight boost
+      const score = Math.max(0, Math.min(1, rawScore * 1.2 + 0.1));
+      const stars = toStars(score);
+      
+      // Risk label mapping from V1
+      let riskLabel = "High Risk";
+      if (score >= 0.85) riskLabel = "High Risk–High Reward";
+      else if (score >= 0.70) riskLabel = "Moderate";
+      else if (score >= 0.50) riskLabel = "Balanced";
+      else if (score >= 0.30) riskLabel = "Cautious";
+
+      // ===== PROJECTION & CONFIDENCE =====
       const projReturn = (() => {
         let projection = momentum12m * 0.25 + (growthComp - 0.5) * 0.35 + (valComp - 0.5) * 0.30 + (sentimentComp - 0.5) * 0.10;
         if (targetMeanPrice && currentPrice) {
@@ -355,7 +378,7 @@ export default function ASREDemo() {
 
       setResult({
         symbol: sym, currentPrice, pe, pb, beta, marketCap,
-        valComp, growthComp, momentumComp, riskComp, sentimentComp,
+        valComp, growthComp, momentumComp, sentimentComp, riskComp,
         score, stars, riskLabel, projReturn, confidence, explanation,
         recommendationsCount: recommendations.length,
         rsi, sharpeRatio, maxDrawdown, targetMeanPrice,
@@ -373,9 +396,9 @@ export default function ASREDemo() {
   return (
     <div className="asre-container">
       <div className="asre-content">
-        <h1 className="gradient-text animate-fadeIn">ASRE Pro 2.0</h1>
+        <h1 className="gradient-text animate-fadeIn">ASRE Pro 2.1</h1>
         <p className="asre-subtitle">
-          Advanced Stock Rating Engine • MarketService Backend • Real-time Yahoo Finance • MACD & Technical Analysis
+          Balanced Stock Rating Engine • V1 Scoring Formula • V2 Technical Analysis • Real-time Yahoo Finance
         </p>
 
         {/* Service Health */}
@@ -493,9 +516,10 @@ export default function ASREDemo() {
                 <span className={
                   result.riskLabel === "Low" ? 'badge badge-success' :
                   result.riskLabel === "Moderate" ? 'badge badge-warning' :
+                  result.riskLabel === "Balanced" ? 'badge badge-info' :
                   'badge badge-danger'
                 }>
-                  {result.riskLabel} Risk
+                  {result.riskLabel}
                 </span>
                 <div className="flex-center" style={{ gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
                   <button
@@ -639,7 +663,7 @@ export default function ASREDemo() {
                 ))}
               </div>
               <div style={{ marginTop: 14, fontSize: 11, color: '#888', fontStyle: 'italic' }}>
-                ⚡ Powered by MarketService v2.0 • Real-time Yahoo Finance Data • Advanced Caching & Rate Limiting
+                ⚡ ASRE Pro 2.1: V1 Balanced Scoring + V2 Advanced Indicators
               </div>
             </div>
           </div>
@@ -657,15 +681,20 @@ export default function ASREDemo() {
 
         <div className="glass-card" style={{ marginTop: 24, padding: 20 }}>
           <div style={{ fontSize: 13, lineHeight: 1.6, color: '#888' }}>
-            <strong className="gradient-text" style={{ fontSize: 14 }}>💡 Features:</strong>
-            <div style={{ marginTop: 8 }}>
-              • <strong>MarketService Backend:</strong> Intelligent caching & rate limiting
+            <strong className="gradient-text" style={{ fontSize: 14 }}>💡 Scoring Formula:</strong>
+            <div style={{ marginTop: 8, fontFamily: 'monospace' }}>
+              Score = 0.30×Valuation + 0.25×Growth + 0.15×Momentum + 0.15×Sentiment − 0.15×Risk
               <br />
-              • <strong>Advanced Indicators:</strong> RSI, MACD, Bollinger Bands, Sharpe Ratio
               <br />
-              • <strong>Watchlist & Export:</strong> Save stocks & download CSV reports
+              <strong>Features:</strong>
               <br />
-              • <strong>Real-time Trending:</strong> Live Indian market data
+              • Balanced weight distribution (V1 formula)
+              <br />
+              • Technical indicators: RSI, MACD, Bollinger Bands
+              <br />
+              • Risk-adjusted scoring with Sharpe ratio & max drawdown
+              <br />
+              • Watchlist & CSV export • Real-time trending stocks
             </div>
           </div>
         </div>
