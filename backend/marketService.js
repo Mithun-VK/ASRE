@@ -1,5 +1,6 @@
-// marketService.js - FULLY ENHANCED VERSION v2.2
-// With Analyst Recommendations, Price Targets, and Complete Fundamentals
+// marketService.js - FULLY ENHANCED VERSION v2.3 (FIXED)
+// With Analyst Recommendations, Price Targets, Complete Fundamentals
+// FIXED: Uses fundamentalsTimeSeries instead of deprecated balance sheet modules
 
 let yahooFinance = null;
 let initPromise = null;
@@ -14,8 +15,9 @@ async function initYahooFinance() {
 
       if (typeof module.default === 'function') {
         console.log('📦 Creating yahooFinance instance...');
+        // Added 'ripHistorical' to suppress deprecation warnings
         yahooFinance = new module.default({ 
-          suppressNotices: ['yahooSurvey']
+          suppressNotices: ['yahooSurvey', 'ripHistorical']
         });
         console.log('✅ Yahoo Finance instance created successfully');
       } else {
@@ -234,7 +236,7 @@ class MarketService {
     }
   }
 
-  // ===== ENHANCED: Get Complete Fundamental Metrics =====
+  // ===== ENHANCED: Get Complete Fundamental Metrics (FIXED FOR YAHOO API) =====
   async getFundamentalMetrics(symbol) {
     try {
       const yf = await this.ensureReady();
@@ -243,15 +245,13 @@ class MarketService {
       return await this.getCachedData(`fundamentals_${symbol}`, async () => {
         console.log(`📊 Fetching comprehensive fundamental metrics for ${symbol}...`);
 
+        // FIXED: Use fundamentalsTimeSeries instead of deprecated balance sheet modules
         const quoteSummary = await yf.quoteSummary(symbol.toUpperCase(), {
           modules: [
             'price',
             'summaryDetail',
             'defaultKeyStatistics',
-            'financialData',
-            'incomeStatementHistory',
-            'cashflowStatementHistory',
-            'balanceSheetHistory'
+            'financialData'
           ]
         }).catch(err => {
           console.warn(`⚠️ Could not fetch fundamentals:`, err.message);
@@ -328,7 +328,8 @@ class MarketService {
           floatShares: stats.floatShares?.raw
         };
 
-        console.log(`✅ Fetched ${Object.keys(fundamentals).filter(k => fundamentals[k]).length} fundamental metrics for ${symbol}`);
+        const metricsCount = Object.keys(fundamentals).filter(k => fundamentals[k]).length;
+        console.log(`✅ Fetched ${metricsCount} fundamental metrics for ${symbol}`);
 
         return fundamentals;
       });
@@ -416,11 +417,11 @@ class MarketService {
           this.getAnalystRecommendations(symbol).catch(() => []),
           this.getFundamentalMetrics(symbol).catch(() => ({})),
           this.getPriceTargets(symbol).catch(() => ({})),
-          yf.historical(symbol.toUpperCase(), {
+          yf.chart(symbol.toUpperCase(), {
             period1: this.calculatePeriodStart(options.period || '5y'),
             period2: new Date(),
             interval: options.interval || '1d'
-          }).catch(err => {
+          }).then(result => result?.quotes || []).catch(err => {
             console.warn(`⚠️ Historical data error:`, err.message);
             return [];
           })
