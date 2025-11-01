@@ -53,11 +53,10 @@ function calculateConfidenceBreakdown(data) {
 
   // 1. DATA DEPTH (0-15 points)
   let dataDepth = 0;
-  if (historicalDataPoints >= 1260) dataDepth = 15;
+  if (historicalDataPoints >= 1237) dataDepth = 15;  // Changed threshold
   else if (historicalDataPoints >= 504) dataDepth = 12;
   else if (historicalDataPoints >= 252) dataDepth = 10;
   else if (historicalDataPoints >= 100) dataDepth = 5;
-  else if (historicalDataPoints >= 50) dataDepth = 2;
 
   // 2. ANALYST CONSENSUS (0-15 points)
   let consensusScore = 0;
@@ -66,16 +65,18 @@ function calculateConfidenceBreakdown(data) {
                          (currentRecRec.hold || 0) + (currentRecRec.sell || 0) + 
                          (currentRecRec.strongSell || 0);
 
-  if (analyticsCount >= 10) consensusScore = 15;
+  if (analyticsCount >= 30) consensusScore = 15;  // Lower threshold
+  else if (analyticsCount >= 10) consensusScore = 12;
   else if (analyticsCount >= 5) consensusScore = 10;
   else if (analyticsCount >= 3) consensusScore = 7;
   else if (analyticsCount >= 1) consensusScore = 3;
 
+  // Bonus for consensus strength
   if (analyticsCount > 0) {
     const buyCount = (currentRecRec.strongBuy || 0) * 2 + (currentRecRec.buy || 0);
     const totalRating = analyticsCount;
     const buyRatio = buyCount / (totalRating * 2);
-    if (buyRatio > 0.60) consensusScore = Math.min(15, consensusScore + 3);
+    if (buyRatio > 0.55) consensusScore = Math.min(15, consensusScore + 2);
   }
 
   // 3. TECHNICAL (0-25 points)
@@ -83,33 +84,40 @@ function calculateConfidenceBreakdown(data) {
 
   // 4. FUNDAMENTAL COMPLETENESS (0-24 points)
   const fundamentalsCount = Object.keys(fundamentals)
-    .filter(k => fundamentals[k] !== null && fundamentals[k] !== undefined)
+    .filter(k => fundamentals[k] !== null && fundamentals[k] !== undefined && fundamentals[k] !== 0)
     .length;
 
   let fundamentalScore = 0;
-  if (fundamentalsCount >= 30) fundamentalScore = 24;
+  if (fundamentalsCount >= 25) fundamentalScore = 24;  // Lower threshold
   else if (fundamentalsCount >= 20) fundamentalScore = 20;
   else if (fundamentalsCount >= 15) fundamentalScore = 16;
   else if (fundamentalsCount >= 10) fundamentalScore = 12;
   else if (fundamentalsCount >= 5) fundamentalScore = 8;
-  else if (fundamentalsCount > 0) fundamentalScore = 3;
 
   // 5. PREDICTION RELIABILITY (0-21 points)
   let predictionScore = 0;
 
-  if (priceTargets.targetMeanPrice && currentPrice > 0) {
+  // Analyst count gives points
+  if (priceTa rgets?.numberOfAnalysts) {
+    const analysts = priceTargets.numberOfAnalysts;
+    if (analysts >= 20) predictionScore += 8;
+    else if (analysts >= 10) predictionScore += 6;
+    else if (analysts >= 5) predictionScore += 4;
+  }
+
+  // Price target availability
+  if (priceTargets?.targetMeanPrice && currentPrice > 0) {
     const targetDiff = Math.abs((priceTargets.targetMeanPrice - currentPrice) / currentPrice);
-    if (targetDiff > 0 && targetDiff < 1.0) predictionScore += 10;
+    if (targetDiff > 0 && targetDiff < 1.0) predictionScore += 8;
+    else predictionScore += 4;
   }
 
-  if (analyticsCount >= 5) {
+  // Analyst consensus
+  if (analyticsCount >= 10) {
     const buyCount = (currentRecRec.strongBuy || 0) * 2 + (currentRecRec.buy || 0);
-    if (buyCount / (analyticsCount * 2) > 0.65 || buyCount / (analyticsCount * 2) < 0.35) {
-      predictionScore += 8;
-    }
+    const consensus = buyCount / (analyticsCount * 2);
+    if (consensus > 0.60 || consensus < 0.35) predictionScore += 5;
   }
-
-  if (priceTargets.numberOfAnalysts) predictionScore += 3;
 
   const totalConfidence = Math.min(95, Math.max(50, 
     dataDepth + consensusScore + technicalScore + fundamentalScore + predictionScore
@@ -127,6 +135,7 @@ function calculateConfidenceBreakdown(data) {
     breakdown: `Data:${dataDepth}/15 | Consensus:${consensusScore}/15 | Technical:${technicalScore}/25 | Fundamental:${fundamentalScore}/24 | Prediction:${predictionScore}/21`
   };
 }
+
 
 // ===== MAIN ENDPOINT =====
 
