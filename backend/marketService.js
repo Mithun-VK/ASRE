@@ -236,108 +236,93 @@ class MarketService {
     }
   }
 
-  // ===== ENHANCED: Get Complete Fundamental Metrics (FIXED FOR YAHOO API) =====
-  async getFundamentalMetrics(symbol) {
-    try {
-      const yf = await this.ensureReady();
-      await this.checkRateLimit();
-
-      return await this.getCachedData(`fundamentals_${symbol}`, async () => {
-        console.log(`📊 Fetching comprehensive fundamental metrics for ${symbol}...`);
-
-        // FIXED: Use fundamentalsTimeSeries instead of deprecated balance sheet modules
-        const quoteSummary = await yf.quoteSummary(symbol.toUpperCase(), {
+// ===== FIX: Get Complete Fundamental Metrics =====
+async getFundamentalMetrics(symbol) {
+  try {
+    const yf = await this.ensureReady();
+    await this.checkRateLimit();
+    
+    return await this.getCachedData(`fundamentals_${symbol}`, async () => {
+      console.log(`📊 Fetching comprehensive fundamental metrics for ${symbol}...`);
+      
+      // Fetch with all available modules
+      let quoteSummary = {};
+      try {
+        quoteSummary = await yf.quoteSummary(symbol.toUpperCase(), {
           modules: [
             'price',
             'summaryDetail',
             'defaultKeyStatistics',
             'financialData'
           ]
-        }).catch(err => {
-          console.warn(`⚠️ Could not fetch fundamentals:`, err.message);
-          return {};
         });
-
-        const price = quoteSummary.price || {};
-        const detail = quoteSummary.summaryDetail || {};
-        const stats = quoteSummary.defaultKeyStatistics || {};
-        const financial = quoteSummary.financialData || {};
-
-        const fundamentals = {
-          // VALUATION METRICS (5 metrics)
-          trailingPE: stats.trailingPE?.raw,
-          forwardPE: detail.forwardPE?.raw,
-          priceToBook: stats.priceToBook?.raw,
-          priceToSales: detail.priceToSalesTrailing12Months?.raw,
-          pegRatio: stats.pegRatio?.raw,
-
-          // GROWTH METRICS (4 metrics)
-          earningsGrowth: financial.earningsGrowth?.raw,
-          revenueGrowth: financial.revenueGrowth?.raw,
-          earningsQuarterlyGrowth: stats.earningsQuarterlyGrowth?.raw,
-          eps: stats.trailingEps?.raw,
-
-          // PROFITABILITY METRICS (4 metrics)
-          returnOnEquity: financial.returnOnEquity?.raw,
-          returnOnAssets: financial.returnOnAssets?.raw,
-          profitMargin: financial.profitMargin?.raw,
-          operatingMargin: financial.operatingMargin?.raw,
-
-          // FINANCIAL HEALTH METRICS (5 metrics)
-          debtToEquity: financial.debtToEquity?.raw,
-          debtToAssets: financial.debtToAssets?.raw,
-          currentRatio: stats.currentRatio?.raw,
-          quickRatio: stats.quickRatio?.raw,
-          debtToCapital: financial.debtToCapital?.raw,
-
-          // CASH FLOW METRICS (5 metrics)
-          freeCashflow: financial.freeCashflow?.raw,
-          operatingCashflow: financial.operatingCashflow?.raw,
-          totalCash: financial.totalCash?.raw,
-          totalDebt: financial.totalDebt?.raw,
-          fcfPerShare: financial.freeCashflowPerShare?.raw,
-
-          // DIVIDEND METRICS (3 metrics)
-          dividendRate: detail.dividendRate?.raw,
-          dividendYield: detail.dividendYield?.raw,
-          payoutRatio: stats.payoutRatio?.raw,
-
-          // EFFICIENCY METRICS (3 metrics)
-          assetTurnover: financial.assetTurnover?.raw,
-          receivablesTurnover: financial.receivablesTurnover?.raw,
-          inventoryTurnover: financial.inventoryTurnover?.raw,
-
-          // PRICE METRICS (4 metrics)
-          fiftyTwoWeekHigh: detail.fiftyTwoWeekHigh?.raw,
-          fiftyTwoWeekLow: detail.fiftyTwoWeekLow?.raw,
-          fiftyDayAverage: detail.fiftyDayAverage?.raw,
-          twoHundredDayAverage: detail.twoHundredDayAverage?.raw,
-
-          // MARKET METRICS (4 metrics)
-          marketCap: price.marketCap?.raw,
-          enterpriseValue: detail.enterpriseValue?.raw,
-          beta: stats.beta?.raw,
-          sharesOutstanding: stats.sharesOutstanding?.raw,
-
-          // ADDITIONAL METRICS (6 metrics)
-          trailingRevenue: detail.trailingRevenue?.raw,
-          yield: detail.yield?.raw,
-          exDividendDate: detail.exDividendDate?.raw,
-          avgVolume: detail.averageVolume?.raw,
-          avgVolume10d: detail.averageVolume10days?.raw,
-          floatShares: stats.floatShares?.raw
-        };
-
-        const metricsCount = Object.keys(fundamentals).filter(k => fundamentals[k]).length;
-        console.log(`✅ Fetched ${metricsCount} fundamental metrics for ${symbol}`);
-
-        return fundamentals;
-      });
-    } catch (error) {
-      console.error(`❌ Error fetching fundamentals:`, error.message);
-      return {};
-    }
+      } catch (err) {
+        console.warn(`⚠️ Could not fetch quote summary:`, err.message);
+      }
+      
+      // Extract safely with fallbacks
+      const price = quoteSummary?.price || {};
+      const detail = quoteSummary?.summaryDetail || {};
+      const stats = quoteSummary?.defaultKeyStatistics || {};
+      const financial = quoteSummary?.financialData || {};
+      
+      // Build fundamentals object - extract raw values properly
+      const fundamentals = {
+        trailingPE: stats?.trailingPE?.raw || stats?.trailingPE,
+        forwardPE: detail?.forwardPE?.raw || detail?.forwardPE,
+        priceToBook: stats?.priceToBook?.raw || stats?.priceToBook,
+        priceToSales: detail?.priceToSalesTrailing12Months?.raw || detail?.priceToSalesTrailing12Months,
+        pegRatio: stats?.pegRatio?.raw || stats?.pegRatio,
+        earningsGrowth: financial?.earningsGrowth?.raw || financial?.earningsGrowth,
+        revenueGrowth: financial?.revenueGrowth?.raw || financial?.revenueGrowth,
+        earningsQuarterlyGrowth: stats?.earningsQuarterlyGrowth?.raw || stats?.earningsQuarterlyGrowth,
+        eps: stats?.trailingEps?.raw || stats?.trailingEps,
+        returnOnEquity: financial?.returnOnEquity?.raw || financial?.returnOnEquity,
+        returnOnAssets: financial?.returnOnAssets?.raw || financial?.returnOnAssets,
+        profitMargin: financial?.profitMargin?.raw || financial?.profitMargin,
+        operatingMargin: financial?.operatingMargin?.raw || financial?.operatingMargin,
+        debtToEquity: financial?.debtToEquity?.raw || financial?.debtToEquity,
+        debtToAssets: financial?.debtToAssets?.raw || financial?.debtToAssets,
+        currentRatio: stats?.currentRatio?.raw || stats?.currentRatio,
+        quickRatio: stats?.quickRatio?.raw || stats?.quickRatio,
+        debtToCapital: financial?.debtToCapital?.raw || financial?.debtToCapital,
+        freeCashflow: financial?.freeCashflow?.raw || financial?.freeCashflow,
+        operatingCashflow: financial?.operatingCashflow?.raw || financial?.operatingCashflow,
+        totalCash: financial?.totalCash?.raw || financial?.totalCash,
+        totalDebt: financial?.totalDebt?.raw || financial?.totalDebt,
+        fcfPerShare: financial?.freeCashflowPerShare?.raw || financial?.freeCashflowPerShare,
+        dividendRate: detail?.dividendRate?.raw || detail?.dividendRate,
+        dividendYield: detail?.dividendYield?.raw || detail?.dividendYield,
+        payoutRatio: stats?.payoutRatio?.raw || stats?.payoutRatio,
+        assetTurnover: financial?.assetTurnover?.raw || financial?.assetTurnover,
+        receivablesTurnover: financial?.receivablesTurnover?.raw || financial?.receivablesTurnover,
+        inventoryTurnover: financial?.inventoryTurnover?.raw || financial?.inventoryTurnover,
+        fiftyTwoWeekHigh: detail?.fiftyTwoWeekHigh?.raw || detail?.fiftyTwoWeekHigh,
+        fiftyTwoWeekLow: detail?.fiftyTwoWeekLow?.raw || detail?.fiftyTwoWeekLow,
+        fiftyDayAverage: detail?.fiftyDayAverage?.raw || detail?.fiftyDayAverage,
+        twoHundredDayAverage: detail?.twoHundredDayAverage?.raw || detail?.twoHundredDayAverage,
+        marketCap: price?.marketCap?.raw || price?.marketCap || financial?.totalAssets?.raw,
+        enterpriseValue: detail?.enterpriseValue?.raw || detail?.enterpriseValue,
+        beta: stats?.beta?.raw || stats?.beta,
+        sharesOutstanding: stats?.sharesOutstanding?.raw || stats?.sharesOutstanding,
+        trailingRevenue: detail?.trailingRevenue?.raw || detail?.trailingRevenue,
+        yield: detail?.yield?.raw || detail?.yield,
+        avgVolume: detail?.averageVolume?.raw || detail?.averageVolume,
+        avgVolume10d: detail?.averageVolume10days?.raw || detail?.averageVolume10days,
+        floatShares: stats?.floatShares?.raw || stats?.floatShares
+      };
+      
+      // Count non-null values
+      const metricsCount = Object.keys(fundamentals).filter(k => fundamentals[k] !== null && fundamentals[k] !== undefined).length;
+      console.log(`✅ Fetched ${metricsCount} fundamental metrics for ${symbol}`);
+      
+      return fundamentals;
+    });
+  } catch (error) {
+    console.error(`❌ Error fetching fundamentals:`, error.message);
+    return {};
   }
+}
 
   // ===== ENHANCED: Get Price Targets & Analyst Consensus =====
   async getPriceTargets(symbol) {

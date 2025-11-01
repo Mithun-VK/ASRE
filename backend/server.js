@@ -8,24 +8,20 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Hardcoded trending Indian stocks
 const TRENDING_STOCKS = [
   'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'ICICIBANK.NS',
   'HINDUNILVR.NS', 'BHARTIARTL.NS', 'ITC.NS', 'SBIN.NS', 'LT.NS'
 ];
 
-// ===== ENHANCED DATA FETCHING USING MARKETSERVICE =====
+// ===== ENHANCED DATA FETCHING =====
 
-// 1. Get comprehensive stock data with 5+ years history
 async function getComprehensiveStockData(symbol) {
   try {
     console.log(`📊 Fetching comprehensive data for ${symbol}...`);
-
     const detailedData = await marketService.getDetailedStockData(symbol, {
       period: '5y',
       interval: '1d'
     });
-
     return detailedData;
   } catch (error) {
     console.error(`⚠️ Error in getComprehensiveStockData:`, error.message);
@@ -33,11 +29,9 @@ async function getComprehensiveStockData(symbol) {
   }
 }
 
-// 2. Get current quote with all available fields
 async function getQuoteData(symbol) {
   try {
     console.log(`💰 Fetching quote data for ${symbol}...`);
-
     const quote = await marketService.getStockData(symbol);
     return quote;
   } catch (error) {
@@ -46,7 +40,8 @@ async function getQuoteData(symbol) {
   }
 }
 
-// ===== ENHANCED CONFIDENCE CALCULATION =====
+// ===== 5-FACTOR CONFIDENCE CALCULATION =====
+
 function calculateConfidenceBreakdown(data) {
   const {
     historicalDataPoints = 0,
@@ -58,9 +53,9 @@ function calculateConfidenceBreakdown(data) {
 
   // 1. DATA DEPTH (0-15 points)
   let dataDepth = 0;
-  if (historicalDataPoints >= 1260) dataDepth = 15; // 5+ years
-  else if (historicalDataPoints >= 504) dataDepth = 12; // 2 years
-  else if (historicalDataPoints >= 252) dataDepth = 10; // 1 year
+  if (historicalDataPoints >= 1260) dataDepth = 15;
+  else if (historicalDataPoints >= 504) dataDepth = 12;
+  else if (historicalDataPoints >= 252) dataDepth = 10;
   else if (historicalDataPoints >= 100) dataDepth = 5;
   else if (historicalDataPoints >= 50) dataDepth = 2;
 
@@ -76,7 +71,6 @@ function calculateConfidenceBreakdown(data) {
   else if (analyticsCount >= 3) consensusScore = 7;
   else if (analyticsCount >= 1) consensusScore = 3;
 
-  // Add consensus strength bonus
   if (analyticsCount > 0) {
     const buyCount = (currentRecRec.strongBuy || 0) * 2 + (currentRecRec.buy || 0);
     const totalRating = analyticsCount;
@@ -84,8 +78,8 @@ function calculateConfidenceBreakdown(data) {
     if (buyRatio > 0.60) consensusScore = Math.min(15, consensusScore + 3);
   }
 
-  // 3. TECHNICAL COMPLETENESS (0-25 points)
-  const technicalScore = 25; // Frontend handles this
+  // 3. TECHNICAL (0-25 points)
+  const technicalScore = 25;
 
   // 4. FUNDAMENTAL COMPLETENESS (0-24 points)
   const fundamentalsCount = Object.keys(fundamentals)
@@ -103,13 +97,11 @@ function calculateConfidenceBreakdown(data) {
   // 5. PREDICTION RELIABILITY (0-21 points)
   let predictionScore = 0;
 
-  // Price target availability
   if (priceTargets.targetMeanPrice && currentPrice > 0) {
     const targetDiff = Math.abs((priceTargets.targetMeanPrice - currentPrice) / currentPrice);
     if (targetDiff > 0 && targetDiff < 1.0) predictionScore += 10;
   }
 
-  // Multiple analysts agreement
   if (analyticsCount >= 5) {
     const buyCount = (currentRecRec.strongBuy || 0) * 2 + (currentRecRec.buy || 0);
     if (buyCount / (analyticsCount * 2) > 0.65 || buyCount / (analyticsCount * 2) < 0.35) {
@@ -117,10 +109,8 @@ function calculateConfidenceBreakdown(data) {
     }
   }
 
-  // Analyst count bonus
   if (priceTargets.numberOfAnalysts) predictionScore += 3;
 
-  // Calculate total confidence
   const totalConfidence = Math.min(95, Math.max(50, 
     dataDepth + consensusScore + technicalScore + fundamentalScore + predictionScore
   ));
@@ -138,7 +128,7 @@ function calculateConfidenceBreakdown(data) {
   };
 }
 
-// ===== MAIN COMPREHENSIVE DATA ENDPOINT (HIGH CONFIDENCE) =====
+// ===== MAIN ENDPOINT =====
 
 app.get('/api/stock/:symbol', async (req, res) => {
   try {
@@ -147,25 +137,21 @@ app.get('/api/stock/:symbol', async (req, res) => {
 🚀 Fetching comprehensive HIGH-CONFIDENCE data for ${symbol}...`);
     const startTime = Date.now();
 
-    // Fetch all data in parallel using marketService
     const detailedData = await getComprehensiveStockData(symbol);
     const quoteData = await getQuoteData(symbol);
 
     const fetchTime = Date.now() - startTime;
 
-    // Extract all data properly
     const historical = detailedData.historical || [];
     const historicalDataPoints = historical.length;
     const recommendations = detailedData.recommendations || [];
     const fundamentals = detailedData.fundamentals || {};
     const priceTargets = detailedData.priceTargets || {};
 
-    // Extract financial data from quote summary
     const statistics = detailedData.statistics || {};
     const financialData = detailedData.financialData || {};
     const summaryDetail = detailedData.summaryDetail || {};
 
-    // Calculate confidence
     const confidenceData = calculateConfidenceBreakdown({
       historicalDataPoints,
       analystRecommendations: recommendations,
@@ -174,13 +160,11 @@ app.get('/api/stock/:symbol', async (req, res) => {
       currentPrice: quoteData.price || 0
     });
 
-    // Build comprehensive response
     const comprehensiveData = {
       symbol: symbol.toUpperCase(),
       timestamp: new Date().toISOString(),
       fetchTimeMs: fetchTime,
 
-      // Real-time quote data
       quote: {
         regularMarketPrice: quoteData.price,
         regularMarketChange: quoteData.change,
@@ -198,11 +182,9 @@ app.get('/api/stock/:symbol', async (req, res) => {
         twoHundredDayAverage: fundamentals.twoHundredDayAverage
       },
 
-      // 5+ years of historical data (HIGH CONFIDENCE)
       historical: historical,
       historicalDataPoints: historicalDataPoints,
 
-      // ✅ Analyst Recommendations (PROPERLY EXTRACTED)
       recommendations: recommendations,
       recommendationTrend: {
         current: recommendations[0] || {},
@@ -210,7 +192,6 @@ app.get('/api/stock/:symbol', async (req, res) => {
         trend: recommendations
       },
 
-      // ✅ Complete fundamental metrics (PROPERLY EXTRACTED)
       fundamentals: {
         valuation: {
           trailingPE: fundamentals.trailingPE,
@@ -267,7 +248,6 @@ app.get('/api/stock/:symbol', async (req, res) => {
         }
       },
 
-      // ✅ Analyst Price Targets (PROPERLY EXTRACTED)
       priceTarget: {
         targetMeanPrice: priceTargets.targetMeanPrice,
         targetMedianPrice: priceTargets.targetMedianPrice,
@@ -278,7 +258,6 @@ app.get('/api/stock/:symbol', async (req, res) => {
         recommendationRating: priceTargets.recommendationRating
       },
 
-      // Company profile
       profile: {
         longName: quoteData.name,
         exchange: quoteData.exchange,
@@ -286,7 +265,6 @@ app.get('/api/stock/:symbol', async (req, res) => {
         quoteType: quoteData.quoteType
       },
 
-      // ✅ ENHANCED CONFIDENCE SUMMARY (NEW)
       confidenceSummary: {
         dataDepthStatus: historicalDataPoints >= 1000 ? 'EXCELLENT' : historicalDataPoints >= 500 ? 'GOOD' : 'LIMITED',
         historicalDataPoints: historicalDataPoints,
@@ -298,7 +276,6 @@ app.get('/api/stock/:symbol', async (req, res) => {
         dataQualityScore: confidenceData.totalConfidence
       },
 
-      // ✅ CONFIDENCE BREAKDOWN (NEW)
       confidence: confidenceData.totalConfidence,
       confidenceBreakdown: confidenceData.breakdown,
       confidenceDetails: {
@@ -326,12 +303,10 @@ app.get('/api/stock/:symbol', async (req, res) => {
   }
 });
 
-// Get multiple quotes efficiently
 app.get('/api/quotes', async (req, res) => {
   try {
     const symbols = req.query.symbols ? req.query.symbols.split(',') : TRENDING_STOCKS;
     console.log(`📊 Fetching quotes for: ${symbols.join(', ')}`);
-
     const quotes = await marketService.getMultipleQuotes(symbols);
     res.json({ quotes });
   } catch (error) {
@@ -340,12 +315,10 @@ app.get('/api/quotes', async (req, res) => {
   }
 });
 
-// Get trending stocks with live data
 app.get('/api/trending', async (req, res) => {
   try {
     console.log('🔥 Fetching trending stocks...');
     const quotes = await marketService.getMultipleQuotes(TRENDING_STOCKS);
-
     const formattedQuotes = quotes.map(q => ({
       symbol: q.symbol || q.name,
       shortName: q.name,
@@ -353,7 +326,6 @@ app.get('/api/trending', async (req, res) => {
       regularMarketChange: q.change,
       regularMarketChangePercent: q.changePercent
     }));
-
     res.json({ quotes: formattedQuotes });
   } catch (error) {
     console.error('❌ Error fetching trending:', error.message);
@@ -363,7 +335,6 @@ app.get('/api/trending', async (req, res) => {
   }
 });
 
-// Get single quote (fast)
 app.get('/api/quote/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
@@ -375,13 +346,11 @@ app.get('/api/quote/:symbol', async (req, res) => {
   }
 });
 
-// Health check with service stats
 app.get('/api/health', async (req, res) => {
   try {
     const healthStatus = await marketService.healthCheck();
     const stats = marketService.getStats();
     const cacheStats = marketService.getCacheStats();
-
     res.json({
       ...healthStatus,
       stats,
@@ -410,11 +379,9 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Service statistics
 app.get('/api/stats', (req, res) => {
   const stats = marketService.getStats();
   const cacheStats = marketService.getCacheStats();
-
   res.json({
     service: stats,
     cache: cacheStats,
@@ -430,7 +397,6 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-// Clear cache
 app.post('/api/cache/clear', (req, res) => {
   marketService.clearCache();
   res.json({ 
@@ -439,7 +405,6 @@ app.post('/api/cache/clear', (req, res) => {
   });
 });
 
-// Extract market data from message
 app.post('/api/analyze-message', async (req, res) => {
   try {
     const { message } = req.body;
@@ -475,19 +440,7 @@ app.listen(PORT, () => {
   console.log(`   ├─ POST /api/cache/clear         - Clear cache`);
   console.log(`   └─ POST /api/analyze-message     - Extract symbols
 `);
-  console.log(`💡 CONFIDENCE SCORING FORMULA:`);
-  console.log(`   Data Depth (0-15):        Historical coverage (5y = max)`);
-  console.log(`   Analyst Consensus (0-15): Recommendation count & agreement`);
-  console.log(`   Technical (0-25):         All 7 indicators present`);
-  console.log(`   Fundamental (0-24):       Complete metric availability`);
-  console.log(`   Prediction (0-21):        Price targets & consensus strength
-`);
-  console.log(`🎯 EXPECTED CONFIDENCE:`);
-  console.log(`   BEFORE: 50% (Data:10 | Consensus:0 | Technical:25 | Fundamental:6 | Prediction:5)`);
-  console.log(`   AFTER:  88% (Data:15 | Consensus:12 | Technical:25 | Fundamental:24 | Prediction:12)
-`);
   console.log(`🚀 Quick Test:`);
-  console.log(`   curl http://localhost:${PORT}/api/health`);
   console.log(`   curl http://localhost:${PORT}/api/stock/AAPL
 `);
 });
