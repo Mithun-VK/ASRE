@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from "react";
 import './App.css';
 
-// ASRE Pro v2.1 - Enhanced with Balanced Scoring Formula
+// ASRE Pro v2.2 - Enhanced with Advanced Confidence Scoring
 // - V1's intuitive balanced weights (0.3, 0.25, 0.15, 0.15, 0.15)
 // - V2's advanced technical indicators (RSI, MACD, Bollinger Bands)
+// - ENHANCED: Multi-factor confidence calculation (0-100 scale)
 // - Professional UI with watchlist & CSV export
 // - Real-time trending stocks
 // - Service health monitoring
@@ -48,6 +49,7 @@ export default function ASREDemo() {
     }
   }
 
+  // ===== UTILITY FUNCTIONS =====
   function std(arr) {
     const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
     const variance = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (arr.length - 1 || 1);
@@ -132,7 +134,6 @@ export default function ASREDemo() {
     return maxDD;
   }
 
-  // ===== ENHANCED SENTIMENT SCORE FROM V2 =====
   function enhancedSentimentScore(recommendations = []) {
     if (!recommendations || recommendations.length === 0) return 0.5;
     let score = 0;
@@ -151,6 +152,169 @@ export default function ASREDemo() {
   function toStars(x) {
     const scaled = Math.max(0, Math.min(1, x));
     return Math.round(scaled * 5 * 10) / 10;
+  }
+
+  // ===== ENHANCED CONFIDENCE CALCULATION FUNCTIONS =====
+
+  // 1. DATA DEPTH & HISTORICAL COVERAGE (+0-15 points)
+  function getDataDepthScore(closes, recommendationsCount) {
+    let score = 0;
+
+    // Price history depth (252 trading days ≈ 1 year)
+    const yearsOfData = closes.length / 252;
+    if (yearsOfData >= 5) score += 15;
+    else if (yearsOfData >= 2) score += 10;
+    else if (yearsOfData >= 1) score += 5;
+    else if (yearsOfData >= 0.5) score += 2;
+
+    return Math.min(15, score);
+  }
+
+  // 2. ANALYST CONSENSUS STRENGTH (+0-15 points)
+  function getAnalystConsensusScore(recommendations = []) {
+    if (!recommendations.length) return 0;
+
+    let score = 0;
+
+    // Count of recommendations (more = more consensus)
+    if (recommendations.length >= 10) score += 10;
+    else if (recommendations.length >= 5) score += 7;
+    else if (recommendations.length >= 3) score += 5;
+    else if (recommendations.length === 2) score += 2;
+    else score += 1;
+
+    // Consensus strength (how aligned are they?)
+    const total = recommendations.reduce((sum, rec) => {
+      return sum + (rec.strongBuy || 0) + (rec.buy || 0) +
+        (rec.sell || 0) + (rec.strongSell || 0);
+    }, 0);
+
+    if (total === 0) return Math.min(15, score);
+
+    const consensusMetric = recommendations.reduce((max, rec) => {
+      const highest = Math.max(
+        rec.strongBuy || 0, rec.buy || 0,
+        rec.sell || 0, rec.strongSell || 0
+      );
+      return Math.max(max, highest / total);
+    }, 0);
+
+    // Strong agreement > 70% consensus
+    if (consensusMetric > 0.70) score += 5;
+    else if (consensusMetric > 0.50) score += 3;
+    else if (consensusMetric > 0.40) score += 1;
+
+    return Math.min(15, score);
+  }
+
+  // 3. TECHNICAL DATA COMPLETENESS (+0-25 points)
+  function getTechnicalDataScore(closes, rsi, macd, bollingerBands, ma50, ma200, sharpeRatio, maxDrawdown) {
+    let score = 0;
+
+    const indicators = [
+      closes.length >= 50,                    // Price data
+      rsi !== 50 && rsi !== null,             // RSI calculated
+      macd && macd.histogram !== 0,           // MACD calculated
+      bollingerBands && bollingerBands.middle !== 0, // Bollinger Bands
+      ma50 !== null && ma200 !== null,        // Moving averages
+      sharpeRatio !== 0 && sharpeRatio !== null, // Sharpe ratio
+      maxDrawdown !== 0 && maxDrawdown !== null   // Max drawdown
+    ];
+
+    // 3-4 points per available technical indicator
+    score = indicators.filter(Boolean).length * 3;
+
+    // Bonus for long-term data (enables reliable technical analysis)
+    if (closes.length >= 200) score += 4;
+
+    return Math.min(25, score);
+  }
+
+  // 4. FUNDAMENTAL METRICS COMPLETENESS (+0-24 points)
+  function getFundamentalDataScore(pe, pb, ps, roe, beta, debtToEquity,
+    freeCashflow, earningsGrowth, revenueGrowth) {
+    let score = 0;
+
+    const metrics = [
+      pe !== null && pe > 0,           // P/E ratio
+      pb !== null && pb > 0,           // P/B ratio
+      ps !== null && ps > 0,           // P/S ratio
+      roe !== null,                    // ROE
+      beta !== null && beta !== 0,     // Beta
+      debtToEquity !== null,           // Debt/Equity
+      freeCashflow !== null && freeCashflow > 0, // Free cash flow
+      earningsGrowth !== null,         // Earnings growth
+      revenueGrowth !== null           // Revenue growth
+    ];
+
+    // Each metric = 2-3 points
+    score = metrics.filter(Boolean).length * 3;
+
+    // Cap at 24
+    return Math.min(24, score);
+  }
+
+  // 5. PREDICTION RELIABILITY (+0-21 points)
+  function getPredictionReliabilityScore(targetMeanPrice, currentPrice,
+    recommendations, momentum12m, volatility) {
+    let score = 0;
+
+    // Analyst price target available & reasonable
+    if (targetMeanPrice && currentPrice && currentPrice > 0) {
+      const targetDiff = Math.abs((targetMeanPrice - currentPrice) / currentPrice);
+      if (targetDiff > 0 && targetDiff < 1.0) score += 5; // 0-100% upside/downside reasonable
+    }
+
+    // Consensus direction (analysts agree on up/down)
+    if (recommendations && recommendations.length >= 5) {
+      const buyCount = recommendations.reduce((sum, r) =>
+        sum + (r.buy || 0) + (r.strongBuy || 0), 0);
+      const totalCount = recommendations.reduce((sum, r) =>
+        sum + (r.buy || 0) + (r.sell || 0) + (r.strongBuy || 0) + (r.strongSell || 0), 0);
+
+      if (totalCount > 0) {
+        const buyRatio = buyCount / totalCount;
+        if (buyRatio > 0.60 || buyRatio < 0.40) score += 5; // Clear direction
+        else if (buyRatio > 0.55 || buyRatio < 0.45) score += 2;
+      }
+    }
+
+    // Recent momentum alignment with analyst sentiment
+    if (momentum12m > 0.20) score += 5; // Strong positive recent momentum
+    else if (momentum12m > 0.05) score += 2;
+
+    // Lower volatility = more predictable
+    if (volatility !== null && volatility !== undefined) {
+      if (volatility < 0.25) score += 6; // Low volatility = more reliable
+      else if (volatility < 0.50) score += 3;
+      else if (volatility < 0.75) score += 1;
+    }
+
+    return Math.min(21, score);
+  }
+
+  // 6. COMBINED CONFIDENCE SCORE (0-100)
+  function calculateConfidence(closes, recommendations, rsi, macd, bollingerBands,
+    ma50, ma200, sharpeRatio, maxDrawdown, pe, pb, ps, roe, beta, debtToEquity,
+    freeCashflow, earningsGrowth, revenueGrowth, targetMeanPrice, currentPrice, momentum12m, volatility) {
+
+    const dataDepth = getDataDepthScore(closes, recommendations.length);
+    const consensusScore = getAnalystConsensusScore(recommendations);
+    const technicalScore = getTechnicalDataScore(closes, rsi, macd, bollingerBands, ma50, ma200, sharpeRatio, maxDrawdown);
+    const fundamentalScore = getFundamentalDataScore(pe, pb, ps, roe, beta, debtToEquity, freeCashflow, earningsGrowth, revenueGrowth);
+    const predictionScore = getPredictionReliabilityScore(targetMeanPrice, currentPrice, recommendations, momentum12m, volatility);
+
+    // Total: 15 + 15 + 25 + 24 + 21 = 100 points
+    const totalScore = dataDepth + consensusScore + technicalScore + fundamentalScore + predictionScore;
+
+    return {
+      total: Math.min(95, Math.max(50, Math.round(totalScore))),
+      dataDepth,
+      consensusScore,
+      technicalScore,
+      fundamentalScore,
+      predictionScore
+    };
   }
 
   function addToWatchlist(sym) {
@@ -181,6 +345,7 @@ export default function ASREDemo() {
       ["Sentiment Score", (result.sentimentComp * 5).toFixed(2)],
       ["Projected 1Y Return", result.projReturn + "%"],
       ["Confidence", result.confidence + "%"],
+      ["Confidence Breakdown", result.confidenceBreakdown],
       ["RSI", result.rsi?.toFixed(2) || "N/A"],
       ["MACD", result.macd?.macd?.toFixed(4) || "N/A"],
       ["Sharpe Ratio", result.sharpeRatio?.toFixed(2) || "N/A"],
@@ -272,7 +437,7 @@ export default function ASREDemo() {
       const sentiment = enhancedSentimentScore(recommendations);
 
       // ===== V1's BALANCED COMPONENT SCORING =====
-      
+
       // VALUATION: 30% weight
       const valComp = (() => {
         let score = 0.5, count = 0;
@@ -311,10 +476,10 @@ export default function ASREDemo() {
         return Math.max(0, Math.min(1, score));
       })();
 
-      // SENTIMENT: 15% weight (from analyst recommendations)
+      // SENTIMENT: 15% weight
       const sentimentComp = sentiment;
 
-      // RISK: 15% weight (subtracted from final score)
+      // RISK: 15% weight
       const riskComp = (() => {
         let risk = 0;
         risk += (volatility ? normalize(volatility, 0.1, 0.8) : 0.15) * 0.30;
@@ -326,26 +491,24 @@ export default function ASREDemo() {
       })();
 
       // ===== V1's FINAL SCORING FORMULA =====
-      // Score = 0.30*Valuation + 0.25*Growth + 0.15*Momentum + 0.15*Sentiment - 0.15*Risk
-      const rawScore = 
-        0.30 * valComp + 
-        0.25 * growthComp + 
-        0.15 * momentumComp + 
-        0.15 * sentimentComp - 
+      const rawScore =
+        0.30 * valComp +
+        0.25 * growthComp +
+        0.15 * momentumComp +
+        0.15 * sentimentComp -
         0.15 * riskComp;
 
-      // Normalize to 0-1 range with slight boost
       const score = Math.max(0, Math.min(1, rawScore * 1.2 + 0.1));
       const stars = toStars(score);
-      
-      // Risk label mapping from V1
+
+      // Risk label mapping
       let riskLabel = "High Risk";
       if (score >= 0.85) riskLabel = "High Risk–High Reward";
       else if (score >= 0.70) riskLabel = "Moderate";
       else if (score >= 0.50) riskLabel = "Balanced";
       else if (score >= 0.30) riskLabel = "Cautious";
 
-      // ===== PROJECTION & CONFIDENCE =====
+      // ===== PROJECTION =====
       const projReturn = (() => {
         let projection = momentum12m * 0.25 + (growthComp - 0.5) * 0.35 + (valComp - 0.5) * 0.30 + (sentimentComp - 0.5) * 0.10;
         if (targetMeanPrice && currentPrice) {
@@ -354,15 +517,33 @@ export default function ASREDemo() {
         return Math.round(projection * 100);
       })();
 
-      const confidence = (() => {
-        let conf = 50;
-        if (closes.length >= 200) conf += 15;
-        if (recommendations.length >= 3) conf += 10;
-        if (pe !== null && pb !== null) conf += 10;
-        if (earningsGrowth !== null) conf += 10;
-        if (targetMeanPrice !== null) conf += 5;
-        return Math.min(95, conf);
-      })();
+      // ===== ENHANCED CONFIDENCE CALCULATION =====
+      const confidenceData = calculateConfidence(
+        closes,
+        recommendations,
+        rsi,
+        macd,
+        bollingerBands,
+        ma50,
+        ma200,
+        sharpeRatio,
+        maxDrawdown,
+        pe,
+        pb,
+        ps,
+        roe,
+        beta,
+        debtToEquity,
+        freeCashflow,
+        earningsGrowth,
+        revenueGrowth,
+        targetMeanPrice,
+        currentPrice,
+        momentum12m,
+        volatility
+      );
+
+      const confidenceBreakdown = `Data:${confidenceData.dataDepth}/15 | Consensus:${confidenceData.consensusScore}/15 | Technical:${confidenceData.technicalScore}/25 | Fundamental:${confidenceData.fundamentalScore}/24 | Prediction:${confidenceData.predictionScore}/21`;
 
       const explanation = [];
       if (pe !== null) explanation.push(`P/E: ${pe.toFixed(2)}`);
@@ -377,17 +558,38 @@ export default function ASREDemo() {
       if (sharpeRatio) explanation.push(`Sharpe: ${sharpeRatio.toFixed(2)}`);
 
       setResult({
-        symbol: sym, currentPrice, pe, pb, beta, marketCap,
-        valComp, growthComp, momentumComp, sentimentComp, riskComp,
-        score, stars, riskLabel, projReturn, confidence, explanation,
+        symbol: sym,
+        currentPrice,
+        pe,
+        pb,
+        beta,
+        marketCap,
+        valComp,
+        growthComp,
+        momentumComp,
+        sentimentComp,
+        riskComp,
+        score,
+        stars,
+        riskLabel,
+        projReturn,
+        confidence: confidenceData.total,
+        confidenceBreakdown,
+        explanation,
         recommendationsCount: recommendations.length,
-        rsi, sharpeRatio, maxDrawdown, targetMeanPrice,
-        macd, bollingerBands, ma50, ma200
+        rsi,
+        sharpeRatio,
+        maxDrawdown,
+        targetMeanPrice,
+        macd,
+        bollingerBands,
+        ma50,
+        ma200
       });
 
     } catch (err) {
-      console.error('❌ Error:', err);
-      setError(err.message || "Unknown error. Make sure backend is running on port 3001.");
+      console.error('Error:', err);
+      setError(err.message || "Unknown error. Make sure backend is running.");
     } finally {
       setLoading(false);
     }
@@ -396,12 +598,11 @@ export default function ASREDemo() {
   return (
     <div className="asre-container">
       <div className="asre-content">
-        <h1 className="gradient-text animate-fadeIn">ASRE Pro 2.1</h1>
+        <h1 className="gradient-text animate-fadeIn">ASRE Pro 2.2</h1>
         <p className="asre-subtitle">
-          Balanced Stock Rating Engine • V1 Scoring Formula • V2 Technical Analysis • Real-time Yahoo Finance
+          Balanced Stock Rating • V1 Scoring • V2 Technical • Enhanced Confidence (0-100) • Real-time Yahoo Finance
         </p>
 
-        {/* Service Health */}
         {serviceHealth && (
           <div className="flex-center" style={{ gap: 10, marginBottom: 15, flexWrap: 'wrap' }}>
             <span className={serviceHealth.status === 'healthy' ? 'badge badge-success' : 'badge badge-danger'}>
@@ -420,7 +621,6 @@ export default function ASREDemo() {
           </div>
         )}
 
-        {/* Trending */}
         {trending.length > 0 && (
           <div className="flex-center" style={{ gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
             <span style={{ color: '#888', fontSize: 13, fontWeight: 600 }}>🔥 Trending:</span>
@@ -437,7 +637,6 @@ export default function ASREDemo() {
           </div>
         )}
 
-        {/* Watchlist */}
         {watchlist.length > 0 && (
           <div className="flex-center" style={{ gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
             <span style={{ color: '#888', fontSize: 13, fontWeight: 600 }}>⭐ Watchlist:</span>
@@ -462,7 +661,6 @@ export default function ASREDemo() {
           </div>
         )}
 
-        {/* Search Form */}
         <form onSubmit={handleSearch} style={{ marginBottom: 32 }}>
           <div className="flex-center" style={{ gap: 10, flexWrap: 'wrap' }}>
             <input
@@ -484,17 +682,14 @@ export default function ASREDemo() {
           </div>
         </form>
 
-        {/* Error */}
         {error && (
           <div className="alert alert-error animate-slideInLeft">
             ⚠️ {error}
           </div>
         )}
 
-        {/* Results */}
         {result && (
           <div className="glass-card animate-fadeIn">
-            {/* Header */}
             <div className="flex-between" style={{ flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <h2 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>{result.symbol}</h2>
@@ -507,7 +702,7 @@ export default function ASREDemo() {
                   </div>
                 )}
               </div>
-              
+
               <div style={{ textAlign: 'right' }}>
                 <div className={result.stars >= 4 ? 'text-gradient-success' : result.stars >= 3 ? 'text-gradient-warning' : 'text-gradient-danger'}
                      style={{ fontSize: 38, fontWeight: 800, marginBottom: 6 }}>
@@ -542,7 +737,6 @@ export default function ASREDemo() {
 
             <hr className="divider" />
 
-            {/* Metrics Grid */}
             <div className="grid-2" style={{ marginBottom: 24 }}>
               {[
                 { label: 'Valuation', value: result.valComp, icon: '💰' },
@@ -554,7 +748,7 @@ export default function ASREDemo() {
                   <div className="metric-label">{metric.icon} {metric.label}</div>
                   <div className="metric-value">{(metric.value * 5).toFixed(2)} ⭐</div>
                   <div className="progress-bar">
-                    <div 
+                    <div
                       className={
                         metric.value >= 0.7 ? 'progress-fill progress-fill-success' :
                         metric.value >= 0.4 ? 'progress-fill progress-fill-warning' :
@@ -567,10 +761,9 @@ export default function ASREDemo() {
               ))}
             </div>
 
-            {/* Projection & Confidence */}
             <div className="grid-2" style={{ marginBottom: 24 }}>
               <div style={{
-                background: result.projReturn >= 0 
+                background: result.projReturn >= 0
                   ? 'linear-gradient(135deg, rgba(17, 153, 142, 0.15), rgba(56, 239, 125, 0.15))'
                   : 'linear-gradient(135deg, rgba(238, 9, 121, 0.15), rgba(255, 106, 0, 0.15))',
                 padding: 20,
@@ -584,14 +777,16 @@ export default function ASREDemo() {
               </div>
 
               <div style={{ background: 'rgba(102, 126, 234, 0.1)', padding: 20, borderRadius: 12 }}>
-                <div className="metric-label">🎯 Confidence</div>
+                <div className="metric-label">🎯 Confidence (Enhanced)</div>
                 <div style={{ fontSize: 30, fontWeight: 800, color: '#667eea' }}>
                   {result.confidence}%
+                </div>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
+                  {result.confidenceBreakdown}
                 </div>
               </div>
             </div>
 
-            {/* Technical Indicators */}
             <div className="glass-card" style={{ marginBottom: 20 }}>
               <h3 style={{ fontSize: 13, marginBottom: 12, fontWeight: 600, color: '#aaa' }}>
                 📋 Technical Indicators
@@ -620,7 +815,7 @@ export default function ASREDemo() {
                     <span style={{ color: '#888' }}>Bollinger:</span>{' '}
                     <span style={{ fontWeight: 600 }}>
                       {result.currentPrice < result.bollingerBands.lower ? 'Oversold' :
-                       result.currentPrice > result.bollingerBands.upper ? 'Overbought' : 'Neutral'}
+                        result.currentPrice > result.bollingerBands.upper ? 'Overbought' : 'Neutral'}
                     </span>
                   </div>
                 )}
@@ -650,7 +845,6 @@ export default function ASREDemo() {
               </div>
             </div>
 
-            {/* Details */}
             <div className="glass-card">
               <h3 style={{ fontSize: 13, marginBottom: 10, fontWeight: 600, color: '#aaa' }}>
                 🔍 Analysis Details
@@ -663,7 +857,7 @@ export default function ASREDemo() {
                 ))}
               </div>
               <div style={{ marginTop: 14, fontSize: 11, color: '#888', fontStyle: 'italic' }}>
-                ⚡ ASRE Pro 2.1: V1 Balanced Scoring + V2 Advanced Indicators
+                ⚡ ASRE Pro 2.2: V1 Scoring + V2 Technical + Enhanced 5-Factor Confidence Model
               </div>
             </div>
           </div>
@@ -686,9 +880,17 @@ export default function ASREDemo() {
               Score = 0.30×Valuation + 0.25×Growth + 0.15×Momentum + 0.15×Sentiment − 0.15×Risk
               <br />
               <br />
+              <strong>Enhanced Confidence (0-100%):</strong>
+              <br />
+              • Data Depth: 0-15 pts (5+ yrs = max)<br />
+              • Analyst Consensus: 0-15 pts (10+ recs = max)<br />
+              • Technical Completeness: 0-25 pts (all 7 indicators)<br />
+              • Fundamental Completeness: 0-24 pts (all 9 metrics)<br />
+              • Prediction Reliability: 0-21 pts (targets + momentum)<br />
+              <br />
               <strong>Features:</strong>
               <br />
-              • Balanced weight distribution (V1 formula)
+              • 5-factor confidence breakdown with transparency
               <br />
               • Technical indicators: RSI, MACD, Bollinger Bands
               <br />
