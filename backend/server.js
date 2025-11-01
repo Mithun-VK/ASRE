@@ -40,7 +40,7 @@ async function getQuoteData(symbol) {
   }
 }
 
-// ===== 5-FACTOR CONFIDENCE CALCULATION =====
+// ===== 5-FACTOR CONFIDENCE CALCULATION (FIXED) =====
 
 function calculateConfidenceBreakdown(data) {
   const {
@@ -53,10 +53,11 @@ function calculateConfidenceBreakdown(data) {
 
   // 1. DATA DEPTH (0-15 points)
   let dataDepth = 0;
-  if (historicalDataPoints >= 1237) dataDepth = 15;  // Changed threshold
-  else if (historicalDataPoints >= 504) dataDepth = 12;
-  else if (historicalDataPoints >= 252) dataDepth = 10;
+  if (historicalDataPoints >= 1260) dataDepth = 15;  // 5+ years
+  else if (historicalDataPoints >= 504) dataDepth = 12;  // 2 years
+  else if (historicalDataPoints >= 252) dataDepth = 10;  // 1 year
   else if (historicalDataPoints >= 100) dataDepth = 5;
+  else if (historicalDataPoints >= 50) dataDepth = 2;
 
   // 2. ANALYST CONSENSUS (0-15 points)
   let consensusScore = 0;
@@ -65,18 +66,17 @@ function calculateConfidenceBreakdown(data) {
                          (currentRecRec.hold || 0) + (currentRecRec.sell || 0) + 
                          (currentRecRec.strongSell || 0);
 
-  if (analyticsCount >= 30) consensusScore = 15;  // Lower threshold
-  else if (analyticsCount >= 10) consensusScore = 12;
+  if (analyticsCount >= 10) consensusScore = 15;
   else if (analyticsCount >= 5) consensusScore = 10;
   else if (analyticsCount >= 3) consensusScore = 7;
   else if (analyticsCount >= 1) consensusScore = 3;
 
-  // Bonus for consensus strength
+  // Add consensus strength bonus
   if (analyticsCount > 0) {
     const buyCount = (currentRecRec.strongBuy || 0) * 2 + (currentRecRec.buy || 0);
     const totalRating = analyticsCount;
     const buyRatio = buyCount / (totalRating * 2);
-    if (buyRatio > 0.55) consensusScore = Math.min(15, consensusScore + 2);
+    if (buyRatio > 0.60) consensusScore = Math.min(15, consensusScore + 3);
   }
 
   // 3. TECHNICAL (0-25 points)
@@ -84,39 +84,42 @@ function calculateConfidenceBreakdown(data) {
 
   // 4. FUNDAMENTAL COMPLETENESS (0-24 points)
   const fundamentalsCount = Object.keys(fundamentals)
-    .filter(k => fundamentals[k] !== null && fundamentals[k] !== undefined && fundamentals[k] !== 0)
+    .filter(k => fundamentals[k] !== null && fundamentals[k] !== undefined)
     .length;
 
   let fundamentalScore = 0;
-  if (fundamentalsCount >= 25) fundamentalScore = 24;  // Lower threshold
+  if (fundamentalsCount >= 30) fundamentalScore = 24;
   else if (fundamentalsCount >= 20) fundamentalScore = 20;
   else if (fundamentalsCount >= 15) fundamentalScore = 16;
   else if (fundamentalsCount >= 10) fundamentalScore = 12;
   else if (fundamentalsCount >= 5) fundamentalScore = 8;
+  else if (fundamentalsCount > 0) fundamentalScore = 3;
 
-  // 5. PREDICTION RELIABILITY (0-21 points)
+  // 5. PREDICTION RELIABILITY (0-21 points) - FIXED TYPO
   let predictionScore = 0;
 
-  // Analyst count gives points
-  if (priceTa rgets?.numberOfAnalysts) {
-    const analysts = priceTargets.numberOfAnalysts;
-    if (analysts >= 20) predictionScore += 8;
-    else if (analysts >= 10) predictionScore += 6;
-    else if (analysts >= 5) predictionScore += 4;
-  }
-
-  // Price target availability
+  // Primary: Price target availability
   if (priceTargets?.targetMeanPrice && currentPrice > 0) {
     const targetDiff = Math.abs((priceTargets.targetMeanPrice - currentPrice) / currentPrice);
-    if (targetDiff > 0 && targetDiff < 1.0) predictionScore += 8;
-    else predictionScore += 4;
+    if (targetDiff > 0 && targetDiff < 1.0) predictionScore += 10;
   }
 
-  // Analyst consensus
-  if (analyticsCount >= 10) {
+  // Secondary: Analyst consensus on direction
+  if (analyticsCount >= 5) {
     const buyCount = (currentRecRec.strongBuy || 0) * 2 + (currentRecRec.buy || 0);
-    const consensus = buyCount / (analyticsCount * 2);
-    if (consensus > 0.60 || consensus < 0.35) predictionScore += 5;
+    if (buyCount / (analyticsCount * 2) > 0.65 || buyCount / (analyticsCount * 2) < 0.35) {
+      predictionScore += 8;
+    }
+  }
+
+  // Tertiary: Analyst count bonus - FIXED (was typo: priceTa rgets)
+  if (priceTargets?.numberOfAnalysts && priceTargets.numberOfAnalysts > 0) {
+    const analysts = priceTargets.numberOfAnalysts;
+    if (analysts >= 30) predictionScore += 5;
+    else if (analysts >= 20) predictionScore += 4;
+    else if (analysts >= 10) predictionScore += 3;
+    else if (analysts >= 5) predictionScore += 2;
+    else predictionScore += 1;
   }
 
   const totalConfidence = Math.min(95, Math.max(50, 
@@ -136,14 +139,12 @@ function calculateConfidenceBreakdown(data) {
   };
 }
 
-
 // ===== MAIN ENDPOINT =====
 
 app.get('/api/stock/:symbol', async (req, res) => {
   try {
     const { symbol } = req.params;
-    console.log(`
-🚀 Fetching comprehensive HIGH-CONFIDENCE data for ${symbol}...`);
+    console.log(`\n🚀 Fetching comprehensive HIGH-CONFIDENCE data for ${symbol}...`);
     const startTime = Date.now();
 
     const detailedData = await getComprehensiveStockData(symbol);
@@ -425,10 +426,8 @@ app.post('/api/analyze-message', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`
-🚀 ASRE Backend Server v2.2 - PRODUCTION READY`);
-  console.log(`📡 Running on http://localhost:${PORT}
-`);
+  console.log(`\n🚀 ASRE Backend Server v2.2 - PRODUCTION READY`);
+  console.log(`📡 Running on http://localhost:${PORT}\n`);
   console.log(`📊 ENHANCED FEATURES:`);
   console.log(`   ✅ 5+ Years Historical Data (1260+ points)`);
   console.log(`   ✅ Analyst Recommendations (48+ analysts for AAPL)`);
@@ -437,8 +436,7 @@ app.listen(PORT, () => {
   console.log(`   ✅ 5-Factor Confidence Scoring (50-95%)`);
   console.log(`   ✅ Company Profiles & Industry Info`);
   console.log(`   ✅ Smart Caching (1 minute timeout)`);
-  console.log(`   ✅ Rate Limiting (30 requests/minute)
-`);
+  console.log(`   ✅ Rate Limiting (30 requests/minute)\n`);
   console.log(`📊 API ENDPOINTS:`);
   console.log(`   ├─ GET  /api/stock/:symbol       - Comprehensive data (HIGH CONFIDENCE)`);
   console.log(`   ├─ GET  /api/quote/:symbol       - Quick quote`);
@@ -447,11 +445,9 @@ app.listen(PORT, () => {
   console.log(`   ├─ GET  /api/health              - Health check + stats`);
   console.log(`   ├─ GET  /api/stats               - Service statistics`);
   console.log(`   ├─ POST /api/cache/clear         - Clear cache`);
-  console.log(`   └─ POST /api/analyze-message     - Extract symbols
-`);
+  console.log(`   └─ POST /api/analyze-message     - Extract symbols\n`);
   console.log(`🚀 Quick Test:`);
-  console.log(`   curl http://localhost:${PORT}/api/stock/AAPL
-`);
+  console.log(`   curl http://localhost:${PORT}/api/stock/AAPL\n`);
 });
 
 module.exports = app;
