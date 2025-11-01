@@ -115,10 +115,10 @@ function calculateConfidenceBreakdown(data) {
   // Tertiary: Analyst count bonus - FIXED (was typo: priceTa rgets)
   if (priceTargets?.numberOfAnalysts && priceTargets.numberOfAnalysts > 0) {
     const analysts = priceTargets.numberOfAnalysts;
-    if (analysts >= 30) predictionScore += 5;
-    else if (analysts >= 20) predictionScore += 4;
-    else if (analysts >= 10) predictionScore += 3;
-    else if (analysts >= 5) predictionScore += 2;
+    if (analysts >= 30) predictionScore += 10;
+    else if (analysts >= 20) predictionScore += 8;
+    else if (analysts >= 10) predictionScore += 6;
+    else if (analysts >= 5) predictionScore += 4;
     else predictionScore += 1;
   }
 
